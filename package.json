@@ -1,0 +1,15 @@
+{
+  "name": "bermuda-bay-cli",
+  "version": "0.0.0",
+  "dependencies": {
+    "@bermuda/sdk": "git+ssh://git@github.com:BermudaBay/sdk",
+    "@noble/hashes": "2.0.1",
+    "ethers": "6.14.4"
+  },
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  }
+}
