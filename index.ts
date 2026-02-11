@@ -1,133 +1,122 @@
-// CLI interface
-
-///must login first
-///set --profile to load given profile state
-///set --password used for file encryption and shkp seeding
-///wip --snap $origin connect to our shkp-snap
-// login --profile ... --password ... ~~snap~~
-
-///sets aliases for addresses
-// adrsbook ?$alias ?$sa
-
-///lists available token symbol,adrs
-// tokens
-
-// address
-// balance
-
-///these send the payloads through our relayer
-// deposit(...TODO)
-// transfer(...TODO)
-// withdraw(...TODO)
-
-/////
-
 import { homedir } from "node:os"
 import { join as pathJoin, dirname } from "node:path"
 import { mkdir } from "node:fs/promises"
 import { parseArgs } from "node:util"
-import { privateEncrypt, privateDecrypt } from "node:crypto"
+import { exit } from "node:process"
 import { formatUnits, parseUnits, Wallet } from "ethers"
 import { blake2s } from "@noble/hashes/blake2.js"
-import bermuda, { type ISdk } from "@bermuda/sdk"
+import bermuda from "@bermuda/sdk"
+import pkg from "./package.json" with { type: "json" }
 
-let sdk: ISdk
-let password: string
-let bermudaKeyPair: any
+const HELP = `bermuda ${pkg.version}
+
+commands:
+  keygen          Generates a Bermuda key pair
+  address         Display your Bermuda address
+  balance         Display your shielded assets
+  deposit         Deposit into Bermuda
+  transfer        Transfer within Bermuda
+  withdraw        Withdraw from Bermuda
+
+flags:
+  --chain         testenv or base-sepolia (default)
+  --seed          Keygen seed, fx a password or private key
+  --profile       Profiles allow separating various owned keys
+  --private-key   Private key of funding account in case of deposits
+  --to            Recipient Bermuda or Ethereum address
+  --token         Token to transact: ETH, WETH, USDC
+  --amount        Amount to transact
+  --relayer-fee   Relayer fee for transfers and withdrawals
+  --unwrap        Unwrap WETH to ETH when withdrawing
+
+examples:
+  bermuda keygen --seed myseed
+  bermuda deposit --token eth --amount 0.9 --private-key 0x...
+  bermuda transfer --to 0x... --token weth --amount 0.3
+  bermuda withdraw --to 0x... --token weth --amount 0.3 --unwrap
+`
+
+main()
 
 async function main() {
-  const { values: opts, positionals: args } = parseArgs({
+  let { values: opts, positionals: args } = parseArgs({
     args: Bun.argv,
     options: {
-      password: { type: "string" },
-      profile: { type: "string" }, // default or saved profile
-      chain: { type: "string" }, // optionally testenv, base-sepolia by default
+      seed: { type: "string" },
+      profile: { type: "string" },
+      chain: { type: "string" },
       "private-key": { type: "string" },
       to: { type: "string" },
       token: { type: "string" },
-      value: { type: "string" },
-      "relayer-fee": { type: "string" }
+      amount: { type: "string" },
+      "relayer-fee": { type: "string" },
+      unwrap: { type: "boolean" },
+      help: { type: "string" }
     },
-    allowPositionals: true 
+    strict: false,
+    allowPositionals: true
   })
 
-  switch (args[0]) {
-    case 'login': await login(opts); break
-    case 'adrs': 
-    case 'adrsbook':
-    case 'tokens':
-    case 'balance':
-    case 'deposit':
-    case 'transfer':
-    case 'withdraw':
-    default: console.log("HELP")
+  if (opts.help) return console.log(HELP)
+
+  opts = {
+    ...opts,
+    chain: opts.chain || process.env.BERMUDA_CHAIN || "base-sepolia",
+    profile: opts.profile || process.env.BERMUDA_PROFILE || "default",
+    seed: opts.seed || process.env.BERMUDA_SEED,
+    ["private-key"]: opts["private-key"] || process.env.PRIVATE_KEY
   }
+
+  switch (args[2]) {
+    case "keygen":
+      await keygen(opts)
+      break
+    case "address":
+      await address(opts)
+      break
+    case "balance":
+      await balance(opts)
+      break
+    case "deposit":
+      await deposit(opts)
+      break
+    case "transfer":
+      await transfer(opts)
+      break
+    case "withdraw":
+      await withdraw(opts)
+      break
+    default:
+      console.log(HELP)
+  }
+
+  exit(0)
 }
 
-async function login(opts: any) {
-  // const { values: opts } = parseArgs({
-  //   args: Bun.argv,
-  //   options: {
-  //     password: { type: "string" },
-  //     profile: { type: "string" }, // default or saved profile
-  //     snap: { type: "boolean" },
-  //     chain: { type: "string" } // optionally testenv, base-sepolia by default
-  //   }
-  // })
-
-  sdk = bermuda(opts.chain || "base-sepolia")
-  password = opts.password || (await prompt("password: "))
-
+async function keygen(opts: any) {
+  const sdk = bermuda(opts.chain)
   const bayKeyFile = keypath(opts.profile)
-  const bayKey = await readEncryptedFile(bayKeyFile, password).catch(noop)
+  const bayKey = await readFile(bayKeyFile).catch(noop)
+  if (bayKey) return console.warn(opts.profile, "key already exists - skipping keygen")
 
-  if (!bayKey) {
-    bermudaKeyPair = keygen(password)
+  const bermudaKeyPair = generateKeyPair(opts.seed, sdk)
+  await mkdir(dirname(bayKeyFile), { recursive: true })
+  await Bun.file(bayKeyFile).write(sdk.hex(bermudaKeyPair.privkey, 32))
 
-    await mkdir(dirname(bayKeyFile), { recursive: true })
-    await writeEncryptedFile(sdk.hex(bermudaKeyPair.privkey, 32), bayKeyFile, password)
-  } else {
-    bermudaKeyPair = sdk.KeyPair.fromScalar(BigInt(bayKey))
-  }
+  console.log(bermudaKeyPair.address())
 }
 
-async function addressBook(opts: any, args:any) {
-  if (!password) return console.log("HELP")
-
-  // const { positionals: args } = parseArgs({ args: Bun.argv, allowPositionals: true })
-  const [_cmd, alias, shieldedAddress] = args
-
-  const bookPath = adrsBookPath(opts.profile)
-  const book = await readEncryptedFile(bookPath, password).then(book => JSON.parse(book!))
-
-  if (!alias || !shieldedAddress) {
-    console.log(book)
-  } else {
-    book[alias] = shieldedAddress
-
-    await Bun.file(bookPath).write(JSON.stringify(book, null, 2))
-  }
+async function address(opts: any) {
+  const sdk = bermuda(opts.chain)
+  const bermudaKeyPair = await getKeyPair(opts, sdk)
+  console.log(bermudaKeyPair.address())
 }
 
-async function address() {
-  if (!bermudaKeyPair) return console.log("HELP")
-
-  console.log(await bermudaKeyPair.address())
-}
-
-//LATER allow customization of tokenlist through env var or somehow
-function tokens() {
-  console.log(`WETH ${sdk.config.mockWETH}\nUSDC ${sdk.config.mockUSDC}`)
-}
-
-function _tokens() {
-  return [sdk.config.mockWETH!, sdk.config.mockUSDC!].map(t => t.toLowerCase())
-}
-
-async function balance() {
-  if (!bermudaKeyPair) return console.log("HELP")
-
-  const tokens = _tokens()
+async function balance(opts: any) {
+  const sdk = bermuda(opts.chain)
+  const bermudaKeyPair = await getKeyPair(opts, sdk)
+  //LATER read from tokenlist config file
+  const tokens = [sdk.config.mockWETH!, sdk.config.mockUSDC!].map(t => t.toLowerCase())
   const utxosByTokens = await sdk.findUtxos({
     keypair: bermudaKeyPair,
     tokens
@@ -142,179 +131,158 @@ async function balance() {
           : null
     const total = sdk.sumAmounts(utxosByTokens[tokenAdrs])
     const pretty = formatUnits(total, tokenAdrs === sdk.config.mockUSDC?.toLowerCase() ? 6 : 18)
-
     console.log(`${symbol} ${pretty}`)
   }
 }
 
 async function deposit(opts: any) {
-  // const { values: opts, positionals: args } = parseArgs({
-  //   args: Bun.argv,
-  //   options: {
-  //     "private-key": { type: "string" },
-  //     to: { type: "string" },
-  //     token: { type: "string" },
-  //     value: { type: "string" },
-  //     "relayer-fee": { type: "string" }
-  //   },
-  //   allowPositionals: true
-  // })
-
   //LATER passthru batch info as: --token <token> <to0> <amount0> <to1> <amount1> ...
   // || (!opts.token && !args.slice(0, 2).every(Boolean))
-  if (!opts["private-key"] || !opts.to || !opts.token || !opts.value) {
-    return console.log("HELP")
+  if (!opts["private-key"] || !opts.token || !opts.amount) {
+    return console.log(HELP)
   }
 
+  const sdk = bermuda(opts.chain)
+
+  let to = await unalias(opts.to, opts)
+  if (!to) {
+    const bermudaKeyPair = await getKeyPair(opts, sdk)
+    to = await bermudaKeyPair.address()
+  }
+
+  const token = tokenadrs(opts.token, sdk)
   const decimals = opts.token.toLowerCase() === sdk.config.mockUSDC?.toLowerCase() ? 6 : 18
-  const fee = opts["relayer-fee"] ? parseUnits(opts["relayer-fee"], decimals) : 0n
-  const amount = parseUnits(opts.value, decimals)
+  const amount = parseUnits(opts.amount, decimals)
+  const wallet = new Wallet(opts["private-key"], sdk.config.provider)
+  let permit
 
-  const wallet = new Wallet(opts["private-key"])
-
-  const permit = await sdk.permit({
-    signer: wallet,
-    spender: await sdk.config.pool.getAddress(),
-    token: opts.token,
-    amount: amount + fee,
-    deadline: await sdk.config.provider.getBlock("latest").then(b => BigInt(b!.timestamp + 100))
-  })
+  if (opts.token.toLowerCase() !== "eth") {
+    permit = await sdk.permit({
+      signer: wallet,
+      spender: await sdk.config.pool.getAddress(),
+      token,
+      amount,
+      deadline: await sdk.config.provider.getBlock("latest").then(b => BigInt(b!.timestamp + 100))
+    })
+  }
 
   const payload = await sdk.deposit(
     {
-      token: opts.token,
-      recipients: [{ amount: amount, shieldedAddress: opts.to }]
+      token,
+      recipients: [{ amount: amount, shieldedAddress: to }]
     },
-    { fee, fundingAccount: wallet.address, permit }
+    { fundingAccount: wallet.address, permit }
   )
 
-  await sdk.relay(sdk.config.relayer!, payload)
+  await wallet
+    .sendTransaction({ ...payload, value: opts.token.toLowerCase() === "eth" ? amount : 0n })
+    .then(res => console.log(res.hash))
 }
 
 async function transfer(opts: any) {
-  // const { values: opts } = parseArgs({
-  //   args: Bun.argv,
-  //   options: {
-  //     to: { type: "string" },
-  //     token: { type: "string" },
-  //     value: { type: "string" },
-  //     "relayer-fee": { type: "string" }
-  //   }
-  // })
-
   //LATER passthru batch info as: --token <token> <to0> <amount0> <to1> <amount1> ...
   // || (!opts.token && !args.slice(0, 2).every(Boolean))
-  if (!opts.to || !opts.token || !opts.value) {
-    return console.log("HELP")
+  if (!opts.to || !opts.token || !opts.amount) {
+    return console.log(HELP)
   }
 
+  const sdk = bermuda(opts.chain)
+  const senderKeyPair = await getKeyPair(opts, sdk)
+  const token = tokenadrs(opts.token, sdk)
   const decimals = opts.token.toLowerCase() === sdk.config.mockUSDC?.toLowerCase() ? 6 : 18
   const fee = opts["relayer-fee"] ? parseUnits(opts["relayer-fee"], decimals) : 0n
-  const amount = parseUnits(opts.value, decimals)
+  const amount = parseUnits(opts.amount, decimals)
+  const shieldedAddress = await unalias(opts.to, opts)
 
   const payload = await sdk.transfer(
     {
-      senderKeyPair: bermudaKeyPair,
-      token: opts.token,
-      recipients: [{ amount: amount, shieldedAddress: opts.to }]
+      senderKeyPair,
+      token,
+      recipients: [{ amount, shieldedAddress }]
     },
     { fee }
   )
 
-  await sdk.relay(sdk.config.relayer!, payload)
+  await sdk.relay(sdk.config.relayer!, payload).then(console.log)
 }
 
 async function withdraw(opts: any) {
-  // const { values: opts } = parseArgs({
-  //   args: Bun.argv,
-  //   options: {
-  //     to: { type: "string" },
-  //     token: { type: "string" },
-  //     value: { type: "string" },
-  //     "relayer-fee": { type: "string" }
-  //   }
-  // })
-
-  if (!opts.to || !opts.token || !opts.value) {
-    return console.log("HELP")
+  if (!opts.to || !opts.token || !opts.amount) {
+    return console.log(HELP)
   }
 
+  const sdk = bermuda(opts.chain)
+  const bermudaKeyPair = await getKeyPair(opts, sdk)
+  const token = tokenadrs(opts.token, sdk)
   const decimals = opts.token.toLowerCase() === sdk.config.mockUSDC?.toLowerCase() ? 6 : 18
   const fee = opts["relayer-fee"] ? parseUnits(opts["relayer-fee"], decimals) : 0n
-  const amount = parseUnits(opts.value, decimals)
+  const amount = parseUnits(opts.amount, decimals)
+  const recipient = await unalias(opts.to, opts)
 
   const payload = await sdk.withdraw(
     {
       senderKeyPair: bermudaKeyPair,
-      token: opts.token,
+      token,
       amount,
-      recipient: opts.to
+      recipient
     },
-    { fee }
+    { fee, unwrap: opts.unwrap }
   )
 
-  await sdk.relay(sdk.config.relayer!, payload)
+  await sdk.relay(sdk.config.relayer!, payload).then(console.log)
 }
 
 const FIELD_SIZE = 21888242871839275222246405745257275088548364400416034343698204186575808495617n
 
-const encoder = new TextEncoder()
-const decoder = new TextDecoder()
-
-function keygen(password: string) {
-  return sdk.KeyPair.fromScalar(BigInt(sdk.hex(blake2s(encoder.encode(password)))) % FIELD_SIZE)
-}
-
-async function readEncryptedFile(filepath: string, password: string): Promise<string | undefined> {
-  return decrypt(
-    password,
-    await Bun.file(filepath)
-      .text()
-      .then(s => s?.trim())
+function generateKeyPair(seed: string, sdk: any) {
+  return sdk.KeyPair.fromScalar(
+    BigInt(sdk.hex(blake2s(new TextEncoder().encode(seed)))) % FIELD_SIZE
   )
 }
 
-async function writeEncryptedFile(
-  data: string,
-  filepath: string,
-  password: string
-): Promise<undefined> {
-  await Bun.file(filepath).write(encrypt(password, data))
+async function getKeyPair(opts: any, sdk: any) {
+  const bayKeyFile = keypath(opts.profile)
+  const bayKey = await readFile(bayKeyFile).catch(noop)
+  if (!bayKey) throw Error("no bermuda key")
+  return sdk.KeyPair.fromScalar(BigInt(bayKey))
 }
 
 function keypath(profile: string = "default"): string {
   return pathJoin(homedir(), ".bermudabay", "cli", profile, "bay_key")
 }
 
-function adrsBookPath(profile: string = "default"): string {
+function bookpath(profile: string = "default"): string {
   return pathJoin(homedir(), ".bermudabay", "cli", profile, "adrs_book")
 }
 
-function encrypt(password: string, data: string): string {
-  return decoder.decode(privateEncrypt(pem(password), encoder.encode(data)))
-}
-
-function decrypt(password: string, data: string | Uint8Array): string {
-  const buf = typeof data === "string" ? encoder.encode(data) : data
-  return decoder.decode(privateDecrypt(pem(password), buf))
-}
-
-function pem(password: string) {
-  return `-----BEGIN PRIVATE KEY-----
-${Buffer.from(blake2s(encoder.encode(password))).toString("base64")}
------END PRIVATE KEY-----`
-}
-
-async function prompt(text: string, n: number = 1) {
-  const lines = []
-  let i = 0
-  for await (const line of console) {
-    lines.push(line)
-    if (++i >= n) {
-      break
-    }
+function tokenadrs(x: string, sdk: any): string {
+  if (x.toLowerCase() === "eth") {
+    return sdk.config.mockWETH
+  } else if (x.toLowerCase() === "weth") {
+    return sdk.config.mockWETH
+  } else if (x.toLowerCase() === "usdc") {
+    return sdk.config.mockUSDC
+  } else {
+    return x
   }
-  return lines.join("").trim()
+}
+
+async function unalias(x: string, opts: any): Promise<string> {
+  //LATER also resolve aliases thru the bermuda registry
+  if (x && !/^0x[a-fA-F0-9]{128}$/.test(x)) {
+    const book = await readFile(bookpath(opts.profile)).catch(noop)
+    if (!book) throw Error("no address book")
+    const entry = JSON.parse(book).find(entry => entry.alias === x)
+    if (!entry) throw Error("no address found for alias")
+    return entry.address
+  }
+  return x
+}
+
+async function readFile(filepath: string): Promise<string | undefined> {
+  return Bun.file(filepath)
+    .text()
+    .then(s => s?.trim())
 }
 
 function noop() {}
