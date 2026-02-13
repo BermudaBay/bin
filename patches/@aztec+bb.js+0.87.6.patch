@@ -1,0 +1,13 @@
+diff --git a/node_modules/@aztec/bb.js/dest/node/barretenberg_wasm/barretenberg_wasm_main/factory/node/index.js b/node_modules/@aztec/bb.js/dest/node/barretenberg_wasm/barretenberg_wasm_main/factory/node/index.js
+index 27cec9a..e63f259 100644
+--- a/node_modules/@aztec/bb.js/dest/node/barretenberg_wasm/barretenberg_wasm_main/factory/node/index.js
++++ b/node_modules/@aztec/bb.js/dest/node/barretenberg_wasm/barretenberg_wasm_main/factory/node/index.js
+@@ -14,7 +14,7 @@ function getCurrentDir() {
+ }
+ export function createMainWorker() {
+     const __dirname = getCurrentDir();
+-    const worker = new Worker(__dirname + `/main.worker.js`);
++    const worker = new Worker(import.meta.dirname + `/main.worker.js`);
+     worker.postMessage({ log: logOptions });
+     return Promise.resolve(worker);
+ }

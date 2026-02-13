@@ -1,9 +1,4 @@
-#!/usr/bin/env bash
-set -euo pipefail
-
-platform=$(uname -ms)
-
-case $platform in
+case $(uname -ms) in
 'Darwin x86_64')
     target=darwin-x64
     ;;
@@ -22,5 +17,11 @@ case $platform in
     ;;
 esac
 
-curl -fso /usr/local/bin/bermuda https://github.com/bermudabay/bin/releases/latest/download/bermuda-$target
+curl -fsSLo /usr/local/bin/bermuda https://github.com/bermudabay/bin/releases/latest/download/bermuda-$target
 chmod +x /usr/local/bin/bermuda
+echo "installed at /usr/local/bin/bermuda"
+
+case :$PATH: in
+*:/usr/local/bin:*) ;; # noop
+*) echo -e "/usr/local/bin is not in \$PATH - to add it run:\necho 'export PATH=\$PATH:/usr/local/bin' >> ~/.profile";
+esac

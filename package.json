@@ -3,13 +3,13 @@
   "version": "0.0.0",
   "scripts": {
     "build": "mkdir -p ./bin && bun run build-darwin-arm64 && bun run build-darwin-x64 && bun run build-linux-arm64 && bun run build-linux-x64",
-    "build-darwin-arm64": "bun build --compile --target bun-darwin-arm64 --minify --sourcemap --bytecode ./index.ts --outfile ./bin/bermuda-darwin-arm64",
-    "build-darwin-x64": "bun build --compile --target bun-darwin-x64 --minify --sourcemap --bytecode ./index.ts --outfile ./bin/bermuda-darwin-x64",
-    "build-linux-arm64": "bun build --compile --target bun-linux-arm64 --minify --sourcemap --bytecode ./index.ts --outfile ./bin/bermuda-linux-arm64",
-    "build-linux-x64": "bun build --compile --target bun-linux-x64 --minify --sourcemap --bytecode ./index.ts --outfile ./bin/bermuda-linux-x64"
+    "build-darwin-arm64": "bun build --compile --target bun-darwin-arm64 --minify --sourcemap --bytecode ./main.js --outfile ./bin/bermuda-darwin-arm64",
+    "build-darwin-x64": "bun build --compile --target bun-darwin-x64 --minify --sourcemap --bytecode ./main.js --outfile ./bin/bermuda-darwin-x64",
+    "build-linux-arm64": "bun build --compile --target bun-linux-arm64 --minify --sourcemap --bytecode ./main.js --outfile ./bin/bermuda-linux-arm64",
+    "build-linux-x64": "bun build --compile --target bun-linux-x64 --minify --sourcemap --bytecode ./main.js --outfile ./bin/bermuda-linux-x64"
   },
   "dependencies": {
-    "@bermuda/sdk": "git+ssh://git@github.com:BermudaBay/sdk.git#base-sepolia-pt3",
+    "@bermuda/sdk": "git+ssh://git@github.com:BermudaBay/sdk.git#fix-bin",
     "@noble/hashes": "2.0.1",
     "ethers": "6.14.4"
   },
