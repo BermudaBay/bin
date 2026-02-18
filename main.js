@@ -35,6 +35,7 @@ flags:
   --amount        Amount to transact
   --relayer-fee   Relayer fee for transfers and withdrawals
   --unwrap        Unwrap WETH to ETH when withdrawing
+  --rpc           Custom RPC URL
   -h, --help      Display this help
   -v, --version   Display the binary version
 
@@ -79,7 +80,12 @@ async function main() {
     ["private-key"]: opts["private-key"] || process.env.PRIVATE_KEY
   }
 
-  const sdk = bermuda(opts.chain, { utxoCache: utxopath(opts.profile) })
+  const sdkOpts = { utxoCache: utxopath(opts.profile) }
+  if (opts.chain !== "testenv") {
+    sdkOpts.provider = opts.rpc || process.env.RPC || process.env.RPC_URL
+  }
+
+  const sdk = bermuda(opts.chain, sdkOpts)
   await sdk._.initBbSync() //FIXME
 
   switch (args[2]) {
@@ -260,9 +266,13 @@ function utxopath(profile = "default") {
 
 function tokenadrs(x, sdk) {
   switch (x.toLowerCase()) {
-    case "eth": case "weth": return sdk.config.mockWETH
-    case "usdc": return sdk.config.mockUSDC
-    default: return x
+    case "eth":
+    case "weth":
+      return sdk.config.mockWETH
+    case "usdc":
+      return sdk.config.mockUSDC
+    default:
+      return x
   }
 }
 
