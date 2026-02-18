@@ -3,7 +3,7 @@ import { join as pathJoin, dirname } from "node:path"
 import { mkdir, readFile, writeFile } from "node:fs/promises"
 import { parseArgs } from "node:util"
 import { exit } from "node:process"
-import { formatUnits, parseUnits, Wallet } from "ethers"
+import { formatUnits, getDefaultProvider, parseUnits, Wallet } from "ethers"
 import { blake2s } from "@noble/hashes/blake2.js"
 import bermuda from "@bermuda/sdk"
 import pkg from "./package.json" with { type: "json" }
@@ -26,24 +26,32 @@ commands:
   withdraw        Withdraw from Bermuda
 
 flags:
-  --chain         testenv or base-sepolia (default)
+  --chain         testenv or base-sepolia; default: base-sepolia
+  --rpc           Custom RPC; default: https://base-sepolia-rpc.publicnode.com
+  --profile       Resolves a specific Bermuda account config; default: default
   --seed          Keygen seed, fx a password or private key
-  --profile       Profiles allow separating various owned keys
   --private-key   Private key of funding account in case of deposits
-  --to            Recipient Bermuda or Ethereum address
-  --token         Token to transact: ETH, WETH, USDC
+  --to            Recipient address or alias; deposit-default: self
+  --token         Symbol of the token to transact: (W)ETH, USDC, ...tokenlist
   --amount        Amount to transact
-  --relayer-fee   Relayer fee for transfers and withdrawals
-  --unwrap        Unwrap WETH to ETH when withdrawing
-  --rpc           Custom RPC URL
+  --relayer-fee   Relayer fee for transfers and withdrawals; default: 0
+  --unwrap        Unwrap WETH to ETH when withdrawing; default: false
   -h, --help      Display this help
   -v, --version   Display the binary version
 
 examples:
+  # writes key to ~/.bermudabay/bin/default/bermudakey.hex
   bermuda keygen --seed myseed
+  # core ops
   bermuda deposit --token eth --amount 0.9 --private-key 0x...
   bermuda transfer --to 0x... --token weth --amount 0.3
-  bermuda withdraw --to 0x... --token weth --amount 0.3 --unwrap`
+  bermuda withdraw --to 0x... --token weth --amount 0.3 --unwrap
+  # recipient batching available for deposits and transfers
+  bermuda transfer --token weth 0x... 0.1 0x... 0.2 0x... 0.3
+
+config:
+  ~/.bermudabay/bin/$profile/tokenlist.json [{chainId,address,symbol,decimals}]
+  ~/.bermudabay/bin/$profile/addressbook.json  [{alias,address}]`
 
 main()
 
@@ -60,10 +68,10 @@ async function main() {
       amount: { type: "string" },
       "relayer-fee": { type: "string" },
       unwrap: { type: "boolean" },
-      help: { type: "string" },
-      h: { type: "string" },
-      version: { type: "string" },
-      v: { type: "string" }
+      help: { type: "boolean" },
+      h: { type: "boolean" },
+      version: { type: "boolean" },
+      v: { type: "boolean" }
     },
     strict: false,
     allowPositionals: true
@@ -81,7 +89,7 @@ async function main() {
   }
 
   const sdkOpts = { utxoCache: utxopath(opts.profile) }
-  if (opts.chain !== "testenv") {
+  if (opts.rpc || process.env.RPC || process.env.RPC_URL) {
     sdkOpts.provider = opts.rpc || process.env.RPC || process.env.RPC_URL
   }
 
@@ -99,10 +107,10 @@ async function main() {
       await balance(opts, sdk)
       break
     case "deposit":
-      await deposit(opts, sdk)
+      await deposit(opts, args, sdk)
       break
     case "transfer":
-      await transfer(opts, sdk)
+      await transfer(opts, args, sdk)
       break
     case "withdraw":
       await withdraw(opts, sdk)
@@ -131,39 +139,50 @@ async function address(opts, sdk) {
 }
 
 async function balance(opts, sdk) {
-  //LATER read from tokenlist config file
-  const tokens = [sdk.config.mockWETH, sdk.config.mockUSDC].map(t => t.toLowerCase())
   const utxosByTokens = await sdk.findUtxos({
     keypair: await keypair(opts, sdk),
-    tokens
+    tokens: await tokenlist(opts, sdk)
   })
 
   for (let tokenAdrs in utxosByTokens) {
-    const symbol =
-      tokenAdrs === sdk.config.mockWETH?.toLowerCase()
-        ? "WETH"
-        : tokenAdrs === sdk.config.mockUSDC?.toLowerCase()
-          ? "USDC"
-          : null
+    const info = await tokeninfo(tokenAdrs, opts, sdk)
     const total = sdk.sumAmounts(utxosByTokens[tokenAdrs])
-    const pretty = formatUnits(total, tokenAdrs === sdk.config.mockUSDC?.toLowerCase() ? 6 : 18)
-    console.log(`${symbol} ${pretty}`)
+    const pretty = formatUnits(total, info.decimals)
+    console.log(`${info.symbol} ${pretty}`)
   }
 }
 
-async function deposit(opts, sdk) {
-  //LATER passthru batch info as: --token <token> <to0> <amount0> <to1> <amount1> ...
-  // || (!opts.token && !args.slice(0, 2).every(Boolean))
-  if (!opts["private-key"] || !opts.token || !opts.amount) return console.log(HELP)
+async function deposit(opts, args, sdk) {
+  if (
+    !opts["private-key"] ||
+    ((!opts.token || !opts.amount) && !opts.token && !args.slice(2, 4).every(Boolean))
+  )
+    return console.log(HELP)
 
-  let to = await unalias(opts.to, opts)
-  if (!to) {
-    to = await keypair(opts, sdk).then(kp => kp.address())
+  const token = await tokeninfo(opts.token, opts, sdk).then(info => info.address)
+  const decimals = opts.token.toLowerCase() === sdk.config.mockUSDC?.toLowerCase() ? 6 : 18
+
+  let total = 0n
+  let recipients = []
+  if (opts.token && !opts.amount) {
+    // batch case: --token <token> <to0> <amount0> <to1> <amount1> ...
+    const _args = args.slice(2)
+    for (let i = 0; i < _args.length; i++) {
+      const shieldedAddress = await unalias(_args[i], "bermuda", opts, sdk)
+      const amount = parseUnits(_args[i + 1], decimals)
+      recipients.push({ shieldedAddress, amount })
+      total += amount
+    }
+  } else {
+    let shieldedAddress = await unalias(opts.to, "bermuda", opts, sdk)
+    if (!shieldedAddress) {
+      shieldedAddress = await keypair(opts, sdk).then(kp => kp.address())
+    }
+    const amount = parseUnits(opts.amount, decimals)
+    recipients.push({ shieldedAddress, amount })
+    total = amount
   }
 
-  const token = tokenadrs(opts.token, sdk)
-  const decimals = opts.token.toLowerCase() === sdk.config.mockUSDC?.toLowerCase() ? 6 : 18
-  const amount = parseUnits(opts.amount, decimals)
   const wallet = new Wallet(opts["private-key"], sdk.config.provider)
   let permit
 
@@ -172,7 +191,7 @@ async function deposit(opts, sdk) {
       signer: wallet,
       spender: await sdk.config.pool.getAddress(),
       token,
-      amount,
+      amount: total,
       deadline: await sdk.config.provider.getBlock("latest").then(b => BigInt(b.timestamp + 100))
     })
   }
@@ -180,33 +199,49 @@ async function deposit(opts, sdk) {
   const payload = await sdk.deposit(
     {
       token,
-      recipients: [{ amount: amount, shieldedAddress: to }]
+      recipients
     },
     { fundingAccount: wallet.address, permit }
   )
 
   await wallet
-    .sendTransaction({ ...payload, value: opts.token.toLowerCase() === "eth" ? amount : 0n })
+    .sendTransaction({ ...payload, value: opts.token.toLowerCase() === "eth" ? total : 0n })
     .then(res => console.log(res.hash))
 }
 
-async function transfer(opts, sdk) {
-  //LATER passthru batch info as: --token <token> <to0> <amount0> <to1> <amount1> ...
-  // || (!opts.token && !args.slice(0, 2).every(Boolean))
-  if (!opts.to || !opts.token || !opts.amount) return console.log(HELP)
+async function transfer(opts, args, sdk) {
+  if ((!opts.to || !opts.token || !opts.amount) && !opts.token && !args.slice(2, 4).every(Boolean))
+    return console.log(HELP)
+
+  const token = await tokeninfo(opts.token, opts, sdk).then(info => info.address)
+  const decimals = opts.token.toLowerCase() === sdk.config.mockUSDC?.toLowerCase() ? 6 : 18
+
+  let recipients = []
+  if (opts.token && !opts.amount) {
+    // batch case: --token <token> <to0> <amount0> <to1> <amount1> ...
+    const _args = args.slice(2)
+    for (let i = 0; i < _args.length; i++) {
+      const shieldedAddress = await unalias(_args[i], "bermuda", opts, sdk)
+      const amount = parseUnits(_args[i + 1], decimals)
+      recipients.push({ shieldedAddress, amount })
+    }
+  } else {
+    let shieldedAddress = await unalias(opts.to, "bermuda", opts, sdk)
+    if (!shieldedAddress) {
+      shieldedAddress = await keypair(opts, sdk).then(kp => kp.address())
+    }
+    const amount = parseUnits(opts.amount, decimals)
+    recipients.push({ shieldedAddress, amount })
+  }
 
   const senderKeyPair = await keypair(opts, sdk)
-  const token = tokenadrs(opts.token, sdk)
-  const decimals = opts.token.toLowerCase() === sdk.config.mockUSDC?.toLowerCase() ? 6 : 18
   const fee = opts["relayer-fee"] ? parseUnits(opts["relayer-fee"], decimals) : 0n
-  const amount = parseUnits(opts.amount, decimals)
-  const shieldedAddress = await unalias(opts.to, opts)
 
   const payload = await sdk.transfer(
     {
       senderKeyPair,
       token,
-      recipients: [{ amount, shieldedAddress }]
+      recipients
     },
     { fee }
   )
@@ -218,11 +253,11 @@ async function withdraw(opts, sdk) {
   if (!opts.to || !opts.token || !opts.amount) return console.log(HELP)
 
   const bermudaKeyPair = await keypair(opts, sdk)
-  const token = tokenadrs(opts.token, sdk)
+  const token = await tokeninfo(opts.token, opts, sdk).then(info => info.address)
   const decimals = opts.token.toLowerCase() === sdk.config.mockUSDC?.toLowerCase() ? 6 : 18
   const fee = opts["relayer-fee"] ? parseUnits(opts["relayer-fee"], decimals) : 0n
   const amount = parseUnits(opts.amount, decimals)
-  const recipient = await unalias(opts.to, opts)
+  const recipient = await unalias(opts.to, "ethereum", opts, sdk)
 
   const payload = await sdk.withdraw(
     {
@@ -253,36 +288,87 @@ async function keypair(opts, sdk) {
 }
 
 function keypath(profile = "default") {
-  return pathJoin(homedir(), ".bermudabay", "cli", profile, "bermuda_key.hex")
+  return pathJoin(homedir(), ".bermudabay", "bin", profile, "bermudakey.hex")
 }
 
 function bookpath(profile = "default") {
-  return pathJoin(homedir(), ".bermudabay", "cli", profile, "adrs_book.json")
+  return pathJoin(homedir(), ".bermudabay", "bin", profile, "addressbook.json")
 }
 
 function utxopath(profile = "default") {
-  return pathJoin(homedir(), ".bermudabay", "cli", profile, "utxo_cache.json")
+  return pathJoin(homedir(), ".bermudabay", "bin", profile, "utxocache.json")
 }
 
-function tokenadrs(x, sdk) {
+function tokenpath(profile = "default") {
+  return pathJoin(homedir(), ".bermudabay", "bin", profile, "tokenlist.json")
+}
+
+async function tokenlist(opts, sdk) {
+  let tokens = []
+  const rawTokenList = await readFile(tokenpath(opts.profile), { encoding: "utf8" }).catch(noop)
+  if (rawTokenList) {
+    const tokenList = JSON.parse(rawTokenList)
+      .filter(t => BigInt(t.chainId) === sdk.config.chainId)
+      .map(t => t.address.toLowerCase())
+    tokens.push(...tokenList)
+  }
+  for (const adrs of [sdk.config.mockWETH, sdk.config.mockUSDC].map(adrs => adrs.toLowerCase())) {
+    if (!tokens.includes(adrs)) tokens.push(adrs)
+  }
+  return tokens
+}
+
+async function tokeninfo(x, opts, sdk) {
+  const rawTokenList = await readFile(tokenpath(opts.profile), { encoding: "utf8" }).catch(noop)
+  if (rawTokenList) {
+    const tokenList = JSON.parse(rawTokenList)
+    for (const entry of tokenList) {
+      if (
+        BigInt(entry.chainId) === sdk.config.chainId &&
+        (entry.symbol.toLowerCase() === x.toLowerCase() ||
+          entry.address.toLowerCase() === x.toLowerCase())
+      ) {
+        return entry
+      }
+    }
+  }
   switch (x.toLowerCase()) {
     case "eth":
     case "weth":
-      return sdk.config.mockWETH
+    case sdk.config.mockWETH.toLowerCase():
+      return { symbol: "WETH", address: sdk.config.mockWETH, decimals: 18 }
     case "usdc":
-      return sdk.config.mockUSDC
+    case sdk.config.mockUSDC.toLowerCase():
+      return { symbol: "USDC", address: sdk.config.mockUSDC, decimals: 6 }
     default:
-      return x
+      throw Error("unknown token")
   }
 }
 
-async function unalias(x, opts) {
-  //LATER also resolve aliases thru the bermuda registry
+async function unalias(x, type, opts, sdk) {
+  if (x?.endsWith(".bay")) {
+    const ba = await sdk.registryShieldedAddressOfName(x).then(y => (y !== "0x" ? y : null))
+    if (!ba) throw Error("no shielded address found for given alias")
+    return ba
+  }
+  if (/^0x[a-fA-F0-9]{40}$/.test(x)) {
+    if (type === "ethereum") return x
+    const ba = await sdk.registryShieldedAddressOf(x).then(y => (y !== "0x" ? y : null))
+    if (!ba) throw Error("no shielded address found for given native address")
+    return ba
+  }
+  if (x?.endsWith(".eth")) {
+    const ea = await getDefaultProvider("mainnet").resolveName(x)
+    if (type === "ethereum") return ea
+    const ba = await sdk.registryShieldedAddressOf(ea).then(y => (y !== "0x" ? y : null))
+    if (!ba) throw Error("no shielded address found for given ens name")
+    return ba
+  }
   if (x && !/^0x[a-fA-F0-9]{128}$/.test(x)) {
     const book = await readFile(bookpath(opts.profile), { encoding: "utf8" }).catch(noop)
     if (!book) throw Error("no address book")
     const entry = JSON.parse(book).find(entry => entry.alias === x)
-    if (!entry) throw Error("no address found for alias")
+    if (!entry) throw Error("no address found for given alias")
     return entry.address
   }
   return x
