@@ -50,8 +50,8 @@ examples:
   bermuda transfer --token weth 0x... 0.1 0x... 0.2 0x... 0.3
 
 config:
-  ~/.bermudabay/bin/$profile/tokenlist.json [{chainId,address,symbol,decimals}]
-  ~/.bermudabay/bin/$profile/addressbook.json  [{alias,address}]`
+  ~/.bermudabay/bin/$profile/tokenlist.json   [{chainId,address,symbol,decimals}]
+  ~/.bermudabay/bin/$profile/addressbook.json [{alias,address}]`
 
 main()
 
@@ -167,7 +167,7 @@ async function deposit(opts, args, sdk) {
   if (opts.token && !opts.amount) {
     // batch case: --token <token> <to0> <amount0> <to1> <amount1> ...
     const _args = args.slice(2)
-    for (let i = 0; i < _args.length; i++) {
+    for (let i = 0; i < _args.length - 1; i++) {
       const shieldedAddress = await unalias(_args[i], "bermuda", opts, sdk)
       const amount = parseUnits(_args[i + 1], decimals)
       recipients.push({ shieldedAddress, amount })
@@ -220,7 +220,7 @@ async function transfer(opts, args, sdk) {
   if (opts.token && !opts.amount) {
     // batch case: --token <token> <to0> <amount0> <to1> <amount1> ...
     const _args = args.slice(2)
-    for (let i = 0; i < _args.length; i++) {
+    for (let i = 0; i < _args.length - 1; i++) {
       const shieldedAddress = await unalias(_args[i], "bermuda", opts, sdk)
       const amount = parseUnits(_args[i + 1], decimals)
       recipients.push({ shieldedAddress, amount })
