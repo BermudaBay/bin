@@ -1,3 +1,5 @@
+version=${VERSION:-v0.0.0}
+
 case $(uname -ms) in
 'Darwin x86_64')
     target=darwin-x64
@@ -17,7 +19,7 @@ case $(uname -ms) in
     ;;
 esac
 
-curl -fsSLo /usr/local/bin/bermuda https://github.com/bermudabay/bin/releases/latest/download/bermuda-$target
+curl -fsSLo /usr/local/bin/bermuda https://github.com/BermudaBay/bin/releases/download/$version/bermuda-$target
 chmod +x /usr/local/bin/bermuda
 echo "installed at /usr/local/bin/bermuda"
 
