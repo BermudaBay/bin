@@ -68,7 +68,6 @@ bun main.js address --profile testing
 rm -rf node_modules *lock.json
 npm i
 bun i --lockfile-only
-# because bug patch not auto applied, manually change __dirname => import.meta.dirname in node_modules/@aztec/bb.js/dest/node/barretenberg_wasm/barretenberg_wasm_main/factory/node/index.js line 17
 bun run build
 # create tag and release manually including binaries as release assets
 ``` -->

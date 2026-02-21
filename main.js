@@ -150,12 +150,8 @@ async function register(opts, sdk) {
   const signer = new Wallet(opts["private-key"], sdk.config.provider)
   const shieldedAddress = await keypair(opts, sdk).then(kp => kp.address())
 
-  const weth = new Contract(sdk.config.mockWETH, sdk.ERC20_ABI, { provider: sdk.config.provider })
-  const registryAdrs = await sdk.config.registry.getAddress()
-  await weth.connect(signer).approve(registryAdrs, 0n)
-
   await sdk
-    .registryRegister(signer, shieldedAddress, opts.alias, undefined)
+    .register(signer, shieldedAddress, opts.alias)
     .then(res => console.log(res.hash))
 }
 
@@ -233,7 +229,12 @@ async function deposit(opts, args, sdk) {
       token,
       recipients
     },
-    { fundingAccount: wallet.address, permit }
+    { 
+      fundingAccount: wallet.address, 
+      permit, 
+      depositId: 42n, //WIP
+      userKeyPair: await keypair(opts, sdk) //TMP
+    }
   )
 
   await wallet
