@@ -68,6 +68,11 @@ bun main.js address --profile testing
 rm -rf node_modules *lock.json
 npm i
 bun i --lockfile-only
+# because bun patch broke after installation manually change line 17 in 
+# node_modules/@aztec/bb.js/dest/node/barretenberg_wasm/barretenberg_wasm_main/factory/node/index.js
+# to: `const worker = new Worker(import.meta.dirname + `/main.worker.js`);`
+# in node_modules/@bermuda/sdk/build/src/chain.js set the base-sepolia registry
+# to 0x60e6570C57fCbc8a50E50737b5E69198e646E09B (slim-registry wout fees)
 bun run build
 # create tag and release manually including binaries as release assets
 ``` -->

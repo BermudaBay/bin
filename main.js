@@ -19,6 +19,7 @@ const HELP = `
 
 commands:
   keygen          Generates a Bermuda key pair
+  register        Publish your Bermuda and Ethereum address and optional alias
   address         Display your Bermuda address
   balance         Display your shielded assets
   deposit         Deposit into Bermuda
@@ -151,7 +152,7 @@ async function register(opts, sdk) {
   const shieldedAddress = await keypair(opts, sdk).then(kp => kp.address())
 
   await sdk
-    .register(signer, shieldedAddress, opts.alias)
+    .registryRegister(signer, shieldedAddress, opts.alias, undefined)
     .then(res => console.log(res.hash))
 }
 

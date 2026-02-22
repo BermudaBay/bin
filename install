@@ -2,7 +2,7 @@
 
 set -eEo pipefail
 
-version=${VERSION:-v0.0.0}
+version=${VERSION:-v0.1.0}
 dir=$HOME/.bermudabay/bin
 bin=$dir/bermuda
 
@@ -30,6 +30,6 @@ chmod +x $bin
 echo "installed at $bin"
 
 if [[ ":$PATH:" != *":$dir:"* ]]; then
-  echo "export PATH=\"\$PATH:$dir\"" >> ~/.profile
-  echo -e "to use bermuda in existing shells run:\nsource ~/.profile" 
+    echo "export PATH=\"\$PATH:$dir\"" >> ~/.profile
+    echo -e "to use bermuda in existing shells run:\nsource ~/.profile" 
 fi
