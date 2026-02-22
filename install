@@ -1,4 +1,10 @@
+#!/usr/bin/env bash
+
+set -eEo pipefail
+
 version=${VERSION:-v0.0.0}
+dir=$HOME/.bermudabay/bin
+bin=$dir/bermuda
 
 case $(uname -ms) in
 'Darwin x86_64')
@@ -19,11 +25,11 @@ case $(uname -ms) in
     ;;
 esac
 
-curl -fsSLo /usr/local/bin/bermuda https://github.com/BermudaBay/bin/releases/download/$version/bermuda-$target
-chmod +x /usr/local/bin/bermuda
-echo "installed at /usr/local/bin/bermuda"
+curl -fsSLo $bin https://github.com/BermudaBay/bin/releases/download/$version/bermuda-$target
+chmod +x $bin
+echo "installed at $bin"
 
-case :$PATH: in
-*:/usr/local/bin:*) ;; # noop
-*) echo -e "/usr/local/bin is not in \$PATH - to add it run:\necho 'export PATH=\$PATH:/usr/local/bin' >> ~/.profile";
-esac
+if [[ ":$PATH:" != *":$dir:"* ]]; then
+  echo "export PATH=\"\$PATH:$dir\"" >> ~/.profile
+  echo -e "to use bermuda in existing shells run:\nsource ~/.profile" 
+fi

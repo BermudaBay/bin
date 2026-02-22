@@ -7,7 +7,7 @@ Binary providing an easy interface for Bermuda core ops: deposits, transfers, an
 ## Install
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/BermudaBay/bin/refs/heads/main/install | bash
+curl -fsSL https://raw.githubusercontent.com/BermudaBay/bin/refs/heads/main/install | /bin/bash
 ```
 
 ## Usage
