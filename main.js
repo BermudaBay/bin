@@ -240,7 +240,8 @@ async function deposit(opts, args, sdk) {
   await wallet
     .sendTransaction({
       ...payload,
-      value: opts.token.toLowerCase() === "eth" ? total : 0n
+      value: opts.token.toLowerCase() === "eth" ? total : 0n,
+      gasLimit: 7_000_000
     })
     .then(res => console.log(res.hash))
 }
