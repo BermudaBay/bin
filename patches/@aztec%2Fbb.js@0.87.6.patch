@@ -1,0 +1,99 @@
+diff --git a/dest/node/barretenberg_wasm/barretenberg_wasm_main/factory/node/index.js b/dest/node/barretenberg_wasm/barretenberg_wasm_main/factory/node/index.js
+index 27cec9af373131ec6c94b33518b5cb6e25fc8e25..1305ce205b0be37224212c6ca2b99b1e57582784 100644
+--- a/dest/node/barretenberg_wasm/barretenberg_wasm_main/factory/node/index.js
++++ b/dest/node/barretenberg_wasm/barretenberg_wasm_main/factory/node/index.js
+@@ -14,7 +14,7 @@ function getCurrentDir() {
+ }
+ export function createMainWorker() {
+     const __dirname = getCurrentDir();
+-    const worker = new Worker(__dirname + `/main.worker.js`);
++    const worker = new Worker(new URL('./main.worker.js', import.meta.url));
+     worker.postMessage({ log: logOptions });
+     return Promise.resolve(worker);
+ }
+diff --git a/dest/node/barretenberg_wasm/barretenberg_wasm_thread/factory/node/index.js b/dest/node/barretenberg_wasm/barretenberg_wasm_thread/factory/node/index.js
+index 88522febdc66acee4d3ee36b3a19987c66bbd12c..fb62e4a2b035245406e78699669acbc3ac94bf9f 100644
+--- a/dest/node/barretenberg_wasm/barretenberg_wasm_thread/factory/node/index.js
++++ b/dest/node/barretenberg_wasm/barretenberg_wasm_thread/factory/node/index.js
+@@ -14,7 +14,7 @@ function getCurrentDir() {
+ }
+ export function createThreadWorker() {
+     const __dirname = getCurrentDir();
+-    const worker = new Worker(__dirname + `/thread.worker.js`);
++    const worker = new Worker(new URL('./main.worker.js', import.meta.url));
+     worker.postMessage({ log: logOptions });
+     return Promise.resolve(worker);
+ }
+diff --git a/dest/node/barretenberg_wasm/fetch_code/node/index.js b/dest/node/barretenberg_wasm/fetch_code/node/index.js
+index 5465896b30f190684508893f6bf61c0912bb26bc..62a4713eb6e04bf030cc8afbde7eb1fcfff26b58 100644
+--- a/dest/node/barretenberg_wasm/fetch_code/node/index.js
++++ b/dest/node/barretenberg_wasm/fetch_code/node/index.js
+@@ -2,6 +2,7 @@ import { readFile } from 'fs/promises';
+ import { dirname } from 'path';
+ import { fileURLToPath } from 'url';
+ import pako from 'pako';
++import wasmFilePath from '../../barretenberg-threads.wasm.gz' with { type: 'file' }
+ function getCurrentDir() {
+     if (typeof __dirname !== 'undefined') {
+         return __dirname;
+@@ -14,11 +15,10 @@ function getCurrentDir() {
+ }
+ // eslint-disable-next-line @typescript-eslint/no-unused-vars
+ export async function fetchCode(multithreaded, wasmPath) {
+-    const path = wasmPath ?? getCurrentDir() + '/../../barretenberg-threads.wasm.gz';
+     // Default bb wasm is compressed, but user could point it to a non-compressed version
+-    const maybeCompressedData = await readFile(path);
++    const maybeCompressedData = await readFile(wasmFilePath);
+     const buffer = new Uint8Array(maybeCompressedData);
+-    const isGzip =
++    const isGzip =
+     // Check magic number
+     buffer[0] === 0x1f &&
+         buffer[1] === 0x8b &&
+diff --git a/dest/node/log/node/index.js b/dest/node/log/node/index.js
+index c9c1395599fc9fd858998ea71da4dd917b41d2d5..f15b3af372db00b5376b098f1f88239c1128b0f9 100644
+--- a/dest/node/log/node/index.js
++++ b/dest/node/log/node/index.js
+@@ -10,24 +10,27 @@ const defaultLevel = parseLogLevel(process.env.LOG_LEVEL);
+ export let logOptions;
+ let logger;
+ export function initLogger({ level = defaultLevel, useStdErr = false } = { level: defaultLevel, useStdErr: false }) {
+-    if (logger) {
+-        return logger;
+-    }
+-    logOptions = { level, useStdErr };
+-    const transport = pino.transport({
+-        target: 'pino/file',
+-        options: { destination: useStdErr ? 2 : 1 },
+-    });
+-    logger = pino({ ...defaultOptions, level }, transport);
++    // if (logger) {
++    //     return logger;
++    // }
++    // logOptions = { level, useStdErr };
++    // const transport = pino.transport({
++    //     target: 'pino/file',
++    //     options: { destination: useStdErr ? 2 : 1 },
++    // });
++    // logger = pino({ ...defaultOptions, level }, transport);
+ }
+ export function createDebugLogger(name) {
+-    initLogger();
+-    const sublogger = logger.child({
+-        name,
+-    });
++    // initLogger();
++    // const sublogger = logger.child({
++    //     name,
++    // });
++    // return (msg) => {
++    //     sublogger.debug(msg);
++    // };
+     return (msg) => {
+-        sublogger.debug(msg);
+-    };
++      console.log(msg)
++    }
+ }
+ function parseLogLevel(logLevel) {
+     if (!logLevel) {

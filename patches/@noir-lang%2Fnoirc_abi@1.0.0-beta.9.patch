@@ -1,0 +1,24 @@
+diff --git a/web/noirc_abi_wasm.js b/web/noirc_abi_wasm.js
+index 5fa104d3e003151d666ffe5cb9a6396ae3b42cc2..0fdfc70253856d0d86171ef6879e41c8888ceb40 100644
+--- a/web/noirc_abi_wasm.js
++++ b/web/noirc_abi_wasm.js
+@@ -1,5 +1,7 @@
+ let wasm;
+ 
++import fs from 'fs'
++import wasmFilePath from './noirc_abi_wasm_bg.wasm' with { type: 'file' }
+ const cachedTextDecoder = (typeof TextDecoder !== 'undefined' ? new TextDecoder('utf-8', { ignoreBOM: true, fatal: true }) : { decode: () => { throw Error('TextDecoder not available') } } );
+ 
+ if (typeof TextDecoder !== 'undefined') { cachedTextDecoder.decode(); };
+@@ -358,9 +360,9 @@ async function __wbg_init(module_or_path) {
+     }
+ 
+     if (typeof module_or_path === 'undefined') {
+-        module_or_path = new URL('noirc_abi_wasm_bg.wasm', import.meta.url);
++        module_or_path = fs.readFileSync(wasmFilePath).buffer
+     }
+-    const imports = __wbg_get_imports();
++    const imports = __wbg_get_imports();
+ 
+     if (typeof module_or_path === 'string' || (typeof Request === 'function' && module_or_path instanceof Request) || (typeof URL === 'function' && module_or_path instanceof URL)) {
+         module_or_path = fetch(module_or_path);
