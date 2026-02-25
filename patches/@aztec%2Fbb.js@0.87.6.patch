@@ -1,5 +1,5 @@
 diff --git a/dest/node/barretenberg_wasm/barretenberg_wasm_main/factory/node/index.js b/dest/node/barretenberg_wasm/barretenberg_wasm_main/factory/node/index.js
-index 27cec9af373131ec6c94b33518b5cb6e25fc8e25..1305ce205b0be37224212c6ca2b99b1e57582784 100644
+index 27cec9af373131ec6c94b33518b5cb6e25fc8e25..d70bacabda5df2d518a2860fab4d872da5181fa4 100644
 --- a/dest/node/barretenberg_wasm/barretenberg_wasm_main/factory/node/index.js
 +++ b/dest/node/barretenberg_wasm/barretenberg_wasm_main/factory/node/index.js
 @@ -14,7 +14,7 @@ function getCurrentDir() {
@@ -12,7 +12,7 @@ index 27cec9af373131ec6c94b33518b5cb6e25fc8e25..1305ce205b0be37224212c6ca2b99b1e
      return Promise.resolve(worker);
  }
 diff --git a/dest/node/barretenberg_wasm/barretenberg_wasm_thread/factory/node/index.js b/dest/node/barretenberg_wasm/barretenberg_wasm_thread/factory/node/index.js
-index 88522febdc66acee4d3ee36b3a19987c66bbd12c..fb62e4a2b035245406e78699669acbc3ac94bf9f 100644
+index 88522febdc66acee4d3ee36b3a19987c66bbd12c..1214689199da6be90728cf774f827104c0f43b89 100644
 --- a/dest/node/barretenberg_wasm/barretenberg_wasm_thread/factory/node/index.js
 +++ b/dest/node/barretenberg_wasm/barretenberg_wasm_thread/factory/node/index.js
 @@ -14,7 +14,7 @@ function getCurrentDir() {
@@ -25,7 +25,7 @@ index 88522febdc66acee4d3ee36b3a19987c66bbd12c..fb62e4a2b035245406e78699669acbc3
      return Promise.resolve(worker);
  }
 diff --git a/dest/node/barretenberg_wasm/fetch_code/node/index.js b/dest/node/barretenberg_wasm/fetch_code/node/index.js
-index 5465896b30f190684508893f6bf61c0912bb26bc..62a4713eb6e04bf030cc8afbde7eb1fcfff26b58 100644
+index 5465896b30f190684508893f6bf61c0912bb26bc..9b6249b3a7142e7af56ff908bfe7355af45383a6 100644
 --- a/dest/node/barretenberg_wasm/fetch_code/node/index.js
 +++ b/dest/node/barretenberg_wasm/fetch_code/node/index.js
 @@ -2,6 +2,7 @@ import { readFile } from 'fs/promises';
@@ -51,10 +51,10 @@ index 5465896b30f190684508893f6bf61c0912bb26bc..62a4713eb6e04bf030cc8afbde7eb1fc
      buffer[0] === 0x1f &&
          buffer[1] === 0x8b &&
 diff --git a/dest/node/log/node/index.js b/dest/node/log/node/index.js
-index c9c1395599fc9fd858998ea71da4dd917b41d2d5..f15b3af372db00b5376b098f1f88239c1128b0f9 100644
+index c9c1395599fc9fd858998ea71da4dd917b41d2d5..9c7589084e5008bb17fce24dc034bbdcea3e81a5 100644
 --- a/dest/node/log/node/index.js
 +++ b/dest/node/log/node/index.js
-@@ -10,24 +10,27 @@ const defaultLevel = parseLogLevel(process.env.LOG_LEVEL);
+@@ -10,24 +10,28 @@ const defaultLevel = parseLogLevel(process.env.LOG_LEVEL);
  export let logOptions;
  let logger;
  export function initLogger({ level = defaultLevel, useStdErr = false } = { level: defaultLevel, useStdErr: false }) {
@@ -92,7 +92,8 @@ index c9c1395599fc9fd858998ea71da4dd917b41d2d5..f15b3af372db00b5376b098f1f88239c
      return (msg) => {
 -        sublogger.debug(msg);
 -    };
-+      console.log(msg)
++      // Uncomment the next line to show debug logs.
++      // console.log(msg)
 +    }
  }
  function parseLogLevel(logLevel) {
