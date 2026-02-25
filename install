@@ -27,6 +27,11 @@ esac
 
 curl -fsSLo $bin https://github.com/BermudaBay/bin/releases/download/$version/bermuda-$target
 chmod +x $bin
+
+if [[ "$target" == *"darwin"* ]]; then
+    xattr -dr com.apple.quarantine $bin
+fi
+
 echo "installed at $bin"
 
 if [[ ":$PATH:" != *":$dir:"* ]]; then
