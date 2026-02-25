@@ -18,5 +18,10 @@
   },
   "peerDependencies": {
     "typescript": "^5"
+  },
+  "patchedDependencies": {
+    "@aztec/bb.js@0.87.6": "patches/@aztec%2Fbb.js@0.87.6.patch",
+    "@noir-lang/noirc_abi@1.0.0-beta.9": "patches/@noir-lang%2Fnoirc_abi@1.0.0-beta.9.patch",
+    "@noir-lang/acvm_js@1.0.0-beta.9": "patches/@noir-lang%2Facvm_js@1.0.0-beta.9.patch"
   }
 }

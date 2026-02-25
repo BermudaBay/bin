@@ -1,0 +1,22 @@
+diff --git a/web/acvm_js.js b/web/acvm_js.js
+index 4f180d051b7b58bd8629ca4240f9262b121954ca..160a87680237c312b4d6170f9892677e5c1c0088 100644
+--- a/web/acvm_js.js
++++ b/web/acvm_js.js
+@@ -1,5 +1,8 @@
+ let wasm;
+ 
++import fs from 'fs'
++import wasmFilePath from './acvm_js_bg.wasm' with { type: 'file' }
++
+ function addToExternrefTable0(obj) {
+     const idx = wasm.__externref_table_alloc();
+     wasm.__wbindgen_export_2.set(idx, obj);
+@@ -917,7 +920,7 @@ async function __wbg_init(module_or_path) {
+     }
+ 
+     if (typeof module_or_path === 'undefined') {
+-        module_or_path = new URL('acvm_js_bg.wasm', import.meta.url);
++        module_or_path = fs.readFileSync(wasmFilePath).buffer
+     }
+     const imports = __wbg_get_imports();
+ 
