@@ -157,7 +157,10 @@ async function register(opts, sdk) {
 }
 
 async function address(opts, sdk) {
-  await keypair(opts, sdk).then(kp => console.log(kp.address()))
+  const adrs = await keypair(opts, sdk).then(kp => kp.address())
+  const alias = await sdk.registryNameOfShieldedAddress(adrs)
+  if (alias) console.log(alias, adrs)
+  else console.log(adrs)
 }
 
 async function balance(opts, sdk) {
