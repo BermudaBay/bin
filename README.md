@@ -13,14 +13,23 @@ curl -fsSL https://raw.githubusercontent.com/BermudaBay/bin/refs/heads/main/inst
 ## Usage
 
 ```sh
+# one-time action - writes key to ~/.bermudabay/bin/default/bermudakey.hex
 bermuda keygen --seed myseed
 
+# optionally publicly linking the alias, eth, and bermuda addresses
+bermuda register --alias myname.bay --private-key 0x...
+
+# checkout your Bermuda account
 bermuda address
 bermuda balance
 
+# core ops
 bermuda deposit --token eth --amount 0.9 --private-key 0x...
-bermuda transfer --to 0x... --token weth --amount 0.3
-bermuda withdraw --to 0x... --token weth --amount 0.3 --unwrap
+bermuda transfer --to alice.bay --token weth --amount 0.3
+bermuda withdraw --to bob.eth --token weth --amount 0.3 --unwrap
+
+# recipient batching available for deposits and transfers
+bermuda transfer --token weth alice.bay 0.1 bob.bay 0.2 0x... 0.3
 ```
 
 <!-- 
@@ -68,11 +77,6 @@ bun main.js address --profile testing
 rm -rf node_modules *lock.json
 npm i
 bun i --lockfile-only
-# because bun patch broke after installation manually change line 17 in 
-# node_modules/@aztec/bb.js/dest/node/barretenberg_wasm/barretenberg_wasm_main/factory/node/index.js
-# to: `const worker = new Worker(import.meta.dirname + `/main.worker.js`);`
-# in node_modules/@bermuda/sdk/build/src/chain.js set the base-sepolia registry
-# to 0x60e6570C57fCbc8a50E50737b5E69198e646E09B (slim-registry wout fees)
 bun run build
 # create tag and release manually including binaries as release assets
 ``` -->
