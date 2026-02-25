@@ -2,8 +2,7 @@
   "name": "bermuda-bay-bin",
   "version": "0.1.0",
   "scripts": {
-    "build": "./scripts/build.sh",
-    "cleanup": "./scripts/cleanup.sh"
+    "build": "./build.sh"
   },
   "dependencies": {
     "@bermuda/sdk": "git+ssh://git@github.com:BermudaBay/sdk.git#bin-fixes",
