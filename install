@@ -2,7 +2,7 @@
 
 set -eEo pipefail
 
-version=${VERSION:-v0.1.0}
+version=${VERSION:-v0.1.1}
 dir=$HOME/.bermudabay/bin
 bin=$dir/bermuda
 

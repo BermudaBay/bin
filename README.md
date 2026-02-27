@@ -74,6 +74,7 @@ bun main.js address --profile testing
 ```
 
 ```sh
+rm -rf ~/.bun/install
 rm -rf node_modules *lock.json
 npm i
 bun i --lockfile-only
