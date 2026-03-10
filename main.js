@@ -95,7 +95,11 @@ async function main() {
     ["private-key"]: opts["private-key"] || process.env.PRIVATE_KEY
   }
 
-  const sdkOpts = { utxoCache: utxopath(opts.profile) }
+  const sdkOpts = {
+    utxoCache: utxopath(opts.profile),
+    commitmentEventsCache: commitmenteventspath(opts.profile)
+  }
+
   if (opts.rpc || process.env.RPC || process.env.RPC_URL) {
     sdkOpts.provider = opts.rpc || process.env.RPC || process.env.RPC_URL
   }
@@ -233,9 +237,9 @@ async function deposit(opts, args, sdk) {
       token,
       recipients
     },
-    { 
-      fundingAccount: wallet.address, 
-      permit, 
+    {
+      fundingAccount: wallet.address,
+      permit,
       depositId: 42n, //WIP
       userKeyPair: await keypair(opts, sdk) //TMP
     }
@@ -354,6 +358,11 @@ function adrsbookpath(profile = "default") {
 function utxopath(profile = "default") {
   return pathJoin(homedir(), ".bermudabay", "bin", profile, "utxocache.json")
 }
+
+function commitmenteventspath(profile = "default") {
+  return pathJoin(homedir(), ".bermudabay", "bin", profile, "commitmenteventscache.json")
+}
+
 
 function tokenlistpath(profile = "default") {
   return pathJoin(homedir(), ".bermudabay", "bin", profile, "tokenlist.json")
