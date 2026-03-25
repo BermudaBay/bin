@@ -3,7 +3,7 @@ import { join as pathJoin, dirname } from "node:path"
 import { mkdir, readFile, writeFile } from "node:fs/promises"
 import { parseArgs } from "node:util"
 import { exit } from "node:process"
-import { Contract, formatUnits, getDefaultProvider, parseUnits, Wallet } from "ethers"
+import { formatUnits, parseUnits, Wallet } from "ethers"
 import { blake2s } from "@noble/hashes/blake2.js"
 import bermuda from "@bermuda/sdk"
 import pkg from "./package.json" with { type: "json" }
@@ -19,7 +19,6 @@ const HELP = `
 
 commands:
   keygen          Generates a Bermuda key pair
-  register        Publish your Bermuda and Ethereum address and optional alias
   address         Display your Bermuda address
   balance         Display your shielded assets
   deposit         Deposit into Bermuda
@@ -31,9 +30,7 @@ flags:
   --rpc           Custom RPC; default: https://base-sepolia-rpc.publicnode.com
   --profile       Resolves a specific Bermuda account config; default: default
   --seed          Keygen seed, fx a password or private key
-  --private-key   Private key of funding account in case of deposits; in case
-                  of registrations it denotes the registrant
-  --alias         Alias for your shielded address when registering
+  --private-key   Private key of funding account in case of deposits
   --to            Recipient address or alias; deposit-default: self
   --token         Symbol of the token to transact: (W)ETH, USDC, USDT; supports
                   custom tokens from ~/.bermudabay/bin/$profile/tokenlist.json
@@ -46,8 +43,6 @@ flags:
 examples:
   # writes key to ~/.bermudabay/bin/default/bermudakey.hex
   bermuda keygen --seed myseed
-  # optionally publicly linking the alias, eth, and bermuda addresses
-  bermuda register --alias myalias.bay --private-key 0x...
   # core ops
   bermuda deposit --token eth --amount 0.9 --private-key 0x...
   bermuda transfer --to 0x... --token weth --amount 0.3
@@ -74,7 +69,6 @@ async function main() {
       amount: { type: "string" },
       "relayer-fee": { type: "string" },
       unwrap: { type: "boolean" },
-      alias: { type: "string" },
       help: { type: "boolean" },
       h: { type: "boolean" },
       version: { type: "boolean" },
@@ -111,9 +105,6 @@ async function main() {
     case "keygen":
       await keygen(opts, sdk)
       break
-    case "register":
-      await register(opts, sdk)
-      break
     case "address":
       await address(opts, sdk)
       break
@@ -149,22 +140,9 @@ async function keygen(opts, sdk) {
   console.log(bermudaKeyPair.address())
 }
 
-async function register(opts, sdk) {
-  if (!opts["private-key"]) return console.log(HELP)
-
-  const signer = new Wallet(opts["private-key"], sdk.config.provider)
-  const shieldedAddress = await keypair(opts, sdk).then(kp => kp.address())
-
-  await sdk
-    .registryRegister(signer, shieldedAddress, opts.alias, undefined)
-    .then(res => console.log(res.hash))
-}
-
 async function address(opts, sdk) {
   const adrs = await keypair(opts, sdk).then(kp => kp.address())
-  const alias = await sdk.registryNameOfShieldedAddress(adrs)
-  if (alias) console.log(alias, adrs)
-  else console.log(adrs)
+  console.log(adrs)
 }
 
 async function balance(opts, sdk) {
@@ -202,13 +180,13 @@ async function deposit(opts, args, sdk) {
     // batch case: --token <token> <to0> <amount0> <to1> <amount1> ...
     const _args = args.slice(2)
     for (let i = 0; i < _args.length - 1; i++) {
-      const shieldedAddress = await unalias(_args[i], "bermuda", opts, sdk)
+      const shieldedAddress = await unalias(_args[i], "bermuda", opts)
       const amount = parseUnits(_args[i + 1], decimals)
       recipients.push({ shieldedAddress, amount })
       total += amount
     }
   } else {
-    let shieldedAddress = await unalias(opts.to, "bermuda", opts, sdk)
+    let shieldedAddress = await unalias(opts.to, "bermuda", opts)
     if (!shieldedAddress) {
       shieldedAddress = await keypair(opts, sdk).then(kp => kp.address())
     }
@@ -273,12 +251,12 @@ async function transfer(opts, args, sdk) {
     // batch case: --token <token> <to0> <amount0> <to1> <amount1> ...
     const _args = args.slice(2)
     for (let i = 0; i < _args.length - 1; i++) {
-      const shieldedAddress = await unalias(_args[i], "bermuda", opts, sdk)
+      const shieldedAddress = await unalias(_args[i], "bermuda", opts)
       const amount = parseUnits(_args[i + 1], decimals)
       recipients.push({ shieldedAddress, amount })
     }
   } else {
-    let shieldedAddress = await unalias(opts.to, "bermuda", opts, sdk)
+    let shieldedAddress = await unalias(opts.to, "bermuda", opts)
     if (!shieldedAddress) {
       shieldedAddress = await keypair(opts, sdk).then(kp => kp.address())
     }
@@ -316,7 +294,7 @@ async function withdraw(opts, sdk) {
     ? parseUnits(opts["relayer-fee"], decimals)
     : 0n
   const amount = parseUnits(opts.amount, decimals)
-  const recipient = await unalias(opts.to, "ethereum", opts, sdk)
+  const recipient = await unalias(opts.to, "ethereum", opts)
 
   const payload = await sdk.withdraw(
     {
@@ -362,7 +340,6 @@ function utxopath(profile = "default") {
 function commitmenteventspath(profile = "default") {
   return pathJoin(homedir(), ".bermudabay", "bin", profile, "commitmenteventscache.json")
 }
-
 
 function tokenlistpath(profile = "default") {
   return pathJoin(homedir(), ".bermudabay", "bin", profile, "tokenlist.json")
@@ -416,30 +393,13 @@ async function tokeninfo(x, opts, sdk) {
   }
 }
 
-async function unalias(x, type, opts, sdk) {
-  if (x?.endsWith(".bay")) {
-    const ba = await sdk
-      .registryShieldedAddressOfName(x)
-      .then(y => (y !== "0x" ? y : null))
-    if (!ba) throw Error("no shielded address found for given alias")
-    return ba
-  }
+async function unalias(x, type, opts) {
   if (/^0x[a-fA-F0-9]{40}$/.test(x)) {
     if (type === "ethereum") return x
-    const ba = await sdk
-      .registryShieldedAddressOf(x)
-      .then(y => (y !== "0x" ? y : null))
-    if (!ba) throw Error("no shielded address found for given native address")
-    return ba
   }
   if (x?.endsWith(".eth")) {
     const ea = await getDefaultProvider("mainnet").resolveName(x)
     if (type === "ethereum") return ea
-    const ba = await sdk
-      .registryShieldedAddressOf(ea)
-      .then(y => (y !== "0x" ? y : null))
-    if (!ba) throw Error("no shielded address found for given ens name")
-    return ba
   }
   if (x && !/^0x[a-fA-F0-9]{128}$/.test(x)) {
     const book = await readFile(adrsbookpath(opts.profile), {
