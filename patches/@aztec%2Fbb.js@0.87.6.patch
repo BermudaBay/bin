@@ -20,7 +20,7 @@ index 88522febdc66acee4d3ee36b3a19987c66bbd12c..1214689199da6be90728cf774f827104
  export function createThreadWorker() {
      const __dirname = getCurrentDir();
 -    const worker = new Worker(__dirname + `/thread.worker.js`);
-+    const worker = new Worker(new URL('./main.worker.js', import.meta.url));
++    const worker = new Worker(new URL('./thread.worker.js', import.meta.url));
      worker.postMessage({ log: logOptions });
      return Promise.resolve(worker);
  }
