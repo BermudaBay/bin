@@ -172,7 +172,7 @@ async function deposit(opts, args, sdk) {
     info => info.address
   )
   const decimals =
-    opts.token.toLowerCase() === sdk.config.mockUSDC?.toLowerCase() ? 6 : 18
+    opts.token.toLowerCase() === "usdc" ? 6 : 18
 
   let total = 0n
   let recipients = []
@@ -182,7 +182,7 @@ async function deposit(opts, args, sdk) {
     for (let i = 0; i < _args.length - 1; i++) {
       const shieldedAddress = await unalias(_args[i], "bermuda", opts)
       const amount = parseUnits(_args[i + 1], decimals)
-      recipients.push({ shieldedAddress, amount })
+      recipients.push({ to: shieldedAddress, amount })
       total += amount
     }
   } else {
@@ -191,35 +191,18 @@ async function deposit(opts, args, sdk) {
       shieldedAddress = await keypair(opts, sdk).then(kp => kp.address())
     }
     const amount = parseUnits(opts.amount, decimals)
-    recipients.push({ shieldedAddress, amount })
+    recipients.push({ to: shieldedAddress, amount })
     total = amount
   }
 
   const wallet = new Wallet(opts["private-key"], sdk.config.provider)
-  let permit
-
-  if (opts.token.toLowerCase() !== "eth") {
-    permit = await sdk.permit({
-      signer: wallet,
-      spender: await sdk.config.pool.getAddress(),
-      token,
-      amount: total,
-      deadline: await sdk.config.provider
-        .getBlock("latest")
-        .then(b => BigInt(b.timestamp + 100))
-    })
-  }
 
   const payload = await sdk.deposit(
     {
+      signer: wallet,
       token,
-      recipients
-    },
-    {
-      fundingAccount: wallet.address,
-      permit,
-      depositId: 42n, //WIP
-      userKeyPair: await keypair(opts, sdk) //TMP
+      recipients,
+      wrap: opts.token.toLowerCase() === "eth"
     }
   )
 
@@ -244,7 +227,7 @@ async function transfer(opts, args, sdk) {
     info => info.address
   )
   const decimals =
-    opts.token.toLowerCase() === sdk.config.mockUSDC?.toLowerCase() ? 6 : 18
+    opts.token.toLowerCase() === "usdc" ? 6 : 18
 
   let recipients = []
   if (opts.token && !opts.amount) {
@@ -253,7 +236,7 @@ async function transfer(opts, args, sdk) {
     for (let i = 0; i < _args.length - 1; i++) {
       const shieldedAddress = await unalias(_args[i], "bermuda", opts)
       const amount = parseUnits(_args[i + 1], decimals)
-      recipients.push({ shieldedAddress, amount })
+      recipients.push({ to: shieldedAddress, amount })
     }
   } else {
     let shieldedAddress = await unalias(opts.to, "bermuda", opts)
@@ -261,7 +244,7 @@ async function transfer(opts, args, sdk) {
       shieldedAddress = await keypair(opts, sdk).then(kp => kp.address())
     }
     const amount = parseUnits(opts.amount, decimals)
-    recipients.push({ shieldedAddress, amount })
+    recipients.push({ to: shieldedAddress, amount })
   }
 
   const senderKeyPair = await keypair(opts, sdk)
@@ -269,16 +252,23 @@ async function transfer(opts, args, sdk) {
     ? parseUnits(opts["relayer-fee"], decimals)
     : 0n
 
-  const payload = await sdk.transfer(
-    {
-      senderKeyPair,
-      token,
-      recipients
-    },
-    { fee }
+  const transferParams = {
+    token,
+    spender: senderKeyPair,
+    recipients
+  }
+  const transferOptions = {
+    fee
+  }
+
+  const transferPlan = await sdk.previewTransferPlan(transferParams, transferOptions)
+  const transferTxHashes = await sdk.executeTransferPlan(
+    transferParams,
+    transferPlan,
+    transferOptions
   )
 
-  await sdk.relay(sdk.config.relayer, payload).then(console.log)
+  console.log(transferTxHashes.join('\n'))
 }
 
 async function withdraw(opts, sdk) {
@@ -289,24 +279,34 @@ async function withdraw(opts, sdk) {
     info => info.address
   )
   const decimals =
-    opts.token.toLowerCase() === sdk.config.mockUSDC?.toLowerCase() ? 6 : 18
+    opts.token.toLowerCase() === "usdc" ? 6 : 18
   const fee = opts["relayer-fee"]
     ? parseUnits(opts["relayer-fee"], decimals)
     : 0n
   const amount = parseUnits(opts.amount, decimals)
   const recipient = await unalias(opts.to, "ethereum", opts)
 
-  const payload = await sdk.withdraw(
-    {
-      senderKeyPair: bermudaKeyPair,
-      token,
-      amount,
-      recipient
-    },
-    { fee, unwrap: opts.unwrap }
+  const withdrawParams = {
+    token,
+    amount,
+    spender: bermudaKeyPair,
+    to: recipient
+  }
+  const withdrawOptions = {
+    fee,
+  }
+
+  const withdrawPlan = await sdk.previewWithdrawPlan(
+    withdrawParams,
+    withdrawOptions
+  )
+  const withdrawTxHashes = await sdk.executeWithdrawPlan(
+    withdrawParams,
+    withdrawPlan,
+    withdrawOptions
   )
 
-  await sdk.relay(sdk.config.relayer, payload).then(console.log)
+  console.log(withdrawTxHashes.join('\n'))
 }
 
 const FIELD_SIZE =
@@ -356,7 +356,7 @@ async function tokenlist(opts, sdk) {
       .map(t => t.address.toLowerCase())
     tokens.push(...tokenList)
   }
-  for (const adrs of [sdk.config.mockWETH, sdk.config.mockUSDC].map(adrs =>
+  for (const adrs of [sdk.config.WETH, sdk.config.USDC].map(adrs =>
     adrs.toLowerCase()
   )) {
     if (!tokens.includes(adrs)) tokens.push(adrs)
@@ -383,11 +383,11 @@ async function tokeninfo(x, opts, sdk) {
   switch (x.toLowerCase()) {
     case "eth":
     case "weth":
-    case sdk.config.mockWETH.toLowerCase():
-      return { symbol: "WETH", address: sdk.config.mockWETH, decimals: 18 }
+    case sdk.config.WETH.toLowerCase():
+      return { symbol: "WETH", address: sdk.config.WETH, decimals: 18 }
     case "usdc":
-    case sdk.config.mockUSDC.toLowerCase():
-      return { symbol: "USDC", address: sdk.config.mockUSDC, decimals: 6 }
+    case sdk.config.USDC.toLowerCase():
+      return { symbol: "USDC", address: sdk.config.USDC, decimals: 6 }
     default:
       throw Error("unknown token")
   }
