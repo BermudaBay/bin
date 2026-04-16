@@ -4,7 +4,6 @@ import { mkdir, readFile, writeFile } from "node:fs/promises"
 import { parseArgs } from "node:util"
 import { exit } from "node:process"
 import { formatUnits, parseUnits, Wallet } from "ethers"
-import { blake2s } from "@noble/hashes/blake2.js"
 import bermuda from "@bermuda/sdk"
 import pkg from "./package.json" with { type: "json" }
 
@@ -128,12 +127,14 @@ async function main() {
 }
 
 async function keygen(opts, sdk) {
+  if (!opts.seed) return console.log(HELP)
+
   const bayKeyFile = keypath(opts.profile)
   const bayKey = await readFile(bayKeyFile, { encoding: "utf8" }).catch(noop)
   if (bayKey)
     return console.warn(opts.profile, "key already exists - skipping keygen")
 
-  const bermudaKeyPair = _keygen(opts.seed, sdk)
+  const bermudaKeyPair = await sdk.account({ seed: opts.seed })
   await mkdir(dirname(bayKeyFile), { recursive: true })
   await writeFile(bayKeyFile, sdk.hex(bermudaKeyPair.privkey, 32))
 
@@ -307,15 +308,6 @@ async function withdraw(opts, sdk) {
   )
 
   console.log(withdrawTxHashes.join('\n'))
-}
-
-const FIELD_SIZE =
-  21888242871839275222246405745257275088548364400416034343698204186575808495617n
-
-function _keygen(seed, sdk) {
-  return sdk.KeyPair.fromScalar(
-    BigInt(sdk.hex(blake2s(new TextEncoder().encode(seed)))) % FIELD_SIZE
-  )
 }
 
 async function keypair(opts, sdk) {
